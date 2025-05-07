@@ -1,0 +1,28 @@
+// Добавьте этот код в schema.prisma
+
+model WalletTransaction {
+  id            String   @id @default(cuid())
+  externalTxId  String   @unique // ID транзакции в блокчейне
+  wallet        CryptoWallet @relation(fields: [walletId], references: [id])
+  walletId      String
+  amount        Float    // Сумма в USDT
+  senderAddress String?  // Адрес отправителя (для входящих транзакций)
+  receiverAddress String? // Адрес получателя (для исходящих транзакций)
+  timestamp     DateTime // Время транзакции
+  status        String   // PENDING, COMPLETED, FAILED
+  type          String   // USER_DEPOSIT, DEPOSIT, TRANSFER_TO_MAIN
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// Обновите модель CryptoWallet, добавив связь с транзакциями
+// model CryptoWallet {
+//   id        String   @id @default(cuid())
+//   address   String   @unique
+//   user      User     @relation(fields: [userId], references: [id])
+//   userId    String   @unique
+//   createdAt DateTime @default(now())
+//   updatedAt DateTime @updatedAt
+//   isActive  Boolean  @default(true)
+//   transactions WalletTransaction[]
+// }

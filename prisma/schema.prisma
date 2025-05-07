@@ -1,0 +1,311 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String   @id @default(cuid())
+  email          String   @unique
+  password       String // sha‑256 hash
+  banned         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  name           String
+  balanceUsdt    Float
+  balanceRub     Float
+  trafficEnabled Boolean  @default(true) // Включен ли трафик для пользователя
+
+  tradedTransactions Transaction[] @relation("TraderTransactions") // Транзакции, где пользователь является трейдером
+  sessions           Session[]
+  cryptoWallet       CryptoWallet?
+  bankDetails        BankDetail[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  ip        String
+  createdAt DateTime @default(now())
+  expiredAt DateTime
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+}
+
+model Admin {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  createdAt DateTime @default(now())
+}
+
+enum MethodType {
+  upi
+  c2ckz
+  c2cuz
+  c2caz
+  c2c
+  sbp
+  spay
+  tpay
+  vpay
+  apay
+  m2ctj
+  m2ntj
+  m2csber
+  m2ctbank
+  connectc2c
+  connectsbp
+  nspk
+  ecom
+  crypto
+}
+
+enum Status {
+  CREATED
+  DISPUTE
+  EXPIRED
+  READY
+  CANCELED
+}
+
+enum TransactionType {
+  IN
+  OUT
+}
+
+model Merchant {
+  id       String  @id @default(cuid())
+  name     String
+  token    String  @unique
+  disabled Boolean @default(false)
+  banned   Boolean @default(false)
+
+  merchantMethods MerchantMethod[]
+  createdAt       DateTime         @default(now())
+  Transaction     Transaction[]
+}
+
+enum Currency {
+  rub
+  usdt
+}
+
+model Method {
+  id       String     @id @default(cuid())
+  code     String     @unique
+  name     String
+  type     MethodType
+  currency Currency   @default(rub)
+
+  commissionPayin  Float
+  commissionPayout Float
+
+  maxPayin  Float
+  minPayin  Float
+  maxPayout Float
+  minPayout Float
+
+  chancePayin  Float // Success rate for payin
+  chancePayout Float // Success rate for payout
+
+  isEnabled Boolean @default(true)
+
+  rateSource RateSource @default(bybit)
+
+  merchantMethods MerchantMethod[]
+  Transaction     Transaction[]
+}
+
+// Junction table for many-to-many relationship between Merchant and Method
+model MerchantMethod {
+  id         String   @id @default(cuid())
+  merchant   Merchant @relation(fields: [merchantId], references: [id])
+  merchantId String
+  method     Method   @relation(fields: [methodId], references: [id])
+  methodId   String
+  isEnabled  Boolean  @default(true)
+
+  @@unique([merchantId, methodId])
+}
+
+enum RateSource {
+  bybit
+}
+
+model Transaction {
+  id          String   @id @default(cuid())
+  //auto increment
+  numericId   Int      @unique @default(autoincrement())
+  merchant    Merchant @relation(fields: [merchantId], references: [id])
+  merchantId  String
+  amount      Float
+  assetOrBank String
+  orderId     String
+  method      Method   @relation(fields: [methodId], references: [id])
+  currency    String?
+  userId      String
+  userIp      String?
+  callbackUri String
+  successUri  String
+  failUri     String
+
+  type TransactionType @default(IN) // payin, payout
+
+  expired_at DateTime
+
+  commission Float // Коммисия мерчанта
+  clientName String // ФИО
+  status     Status      @default(CREATED)
+  requisites BankDetail? @relation(fields: [bankDetailId], references: [id])
+
+  rate     Float? // Exchange rate at the time of transaction creation
+  traderId String?
+  trader   User?   @relation("TraderTransactions", fields: [traderId], references: [id])
+
+  isMock Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  methodId  String
+
+  receipts Receipt[]
+
+  bankDetailId String?
+}
+
+model Receipt {
+  id            String      @id @default(cuid())
+  transaction   Transaction @relation(fields: [transactionId], references: [id])
+  transactionId String
+  fileData      String // Файл в формате base64
+  fileName      String
+  isChecked     Boolean     @default(false) // Проверен ли чек
+  isFake        Boolean     @default(false) // Является ли чек поддельным
+  isAuto        Boolean     @default(false) // Проверен ли чек автоматически
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+enum BankType {
+  SBERBANK
+  RAIFFEISEN
+  GAZPROMBANK
+  POCHTABANK
+  VTB
+  ROSSELKHOZBANK
+  ALFABANK
+  URALSIB
+  LOKOBANK
+  AKBARS
+  MKB
+  SPBBANK
+  MTSBANK
+  PROMSVYAZBANK
+  OZONBANK
+  RENAISSANCE
+  OTPBANK
+  AVANGARD
+  VLADBUSINESSBANK
+  TAVRICHESKIY
+  FORABANK
+  BCSBANK
+  HOMECREDIT
+  BBRBANK
+  CREDITEUROPE
+  RNKB
+  UBRIR
+  GENBANK
+  SINARA
+  ABSOLUTBANK
+  MTSMONEY
+  SVOYBANK
+  TRANSKAPITALBANK
+  DOLINSK
+}
+
+model WalletTransaction {
+  id              String       @id @default(cuid())
+  externalTxId    String       @unique // ID транзакции в блокчейне
+  wallet          CryptoWallet @relation(fields: [walletId], references: [id])
+  walletId        String
+  amount          Float // Сумма в USDT
+  senderAddress   String? // Адрес отправителя (для входящих транзакций)
+  receiverAddress String? // Адрес получателя (для исходящих транзакций)
+  timestamp       DateTime // Время транзакции
+  status          String // PENDING, COMPLETED, FAILED
+  type            String // USER_DEPOSIT, DEPOSIT, TRANSFER_TO_MAIN
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+}
+
+model BankDetail {
+  id                   String        @id @default(cuid())
+  user                 User          @relation(fields: [userId], references: [id])
+  userId               String
+  methodType           MethodType
+  bankType             BankType
+  cardNumber           String
+  recipientName        String
+  phoneNumber          String?
+  minAmount            Float
+  maxAmount            Float
+  dailyLimit           Float
+  monthlyLimit         Float
+  maxCountTransactions Int?
+  intervalMinutes      Int           @default(0) // Интервал между заявками в минутах
+  isArchived           Boolean       @default(false)
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+  Transaction          Transaction[]
+}
+
+model MasterWallet {
+  id          String   @id @default(cuid())
+  address     String   @unique
+  privateHex  String   @map("private_hex")
+  balanceUsdt Float    @default(0) @map("balance_usdt")
+  balanceTrx  Float    @default(0) @map("balance_trx")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt       @map("updated_at")
+
+  transfers MasterWalletTransfer[]
+}
+
+model MasterWalletTransfer {
+  id             String        @id @default(cuid())
+  masterWallet   MasterWallet  @relation(fields: [masterWalletId], references: [id])
+  masterWalletId String        @map("master_wallet_id")
+  amount         Float
+  toAddress      String        @map("to_address")
+  asset          String
+  status         String
+  txHash         String?       @map("tx_hash")
+  error          String?
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt       @map("updated_at")
+}
+
+model SystemConfig {
+  key   String @id
+  value String
+}
+
+// CryptoWallet — snake_case columns for SQLx
+model CryptoWallet {
+  id          String   @id @default(cuid())
+  address     String   @unique
+  user        User     @relation(fields: [userId], references: [id])
+  userId      String   @unique @map("user_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt       @map("updated_at")
+  isActive    Boolean  @default(true)   @map("is_active")
+  transactions WalletTransaction[]
+}
