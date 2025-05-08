@@ -24,10 +24,11 @@ model User {
   balanceRub     Float
   trafficEnabled Boolean  @default(true) // Включен ли трафик для пользователя
 
-  tradedTransactions Transaction[] @relation("TraderTransactions") // Транзакции, где пользователь является трейдером
-  sessions           Session[]
-  cryptoWallet       CryptoWallet?
-  bankDetails        BankDetail[]
+  tradedTransactions    Transaction[]           @relation("TraderTransactions") // Транзакции, где пользователь является трейдером
+  sessions              Session[]
+  cryptoWallet          CryptoWallet?
+  bankDetails           BankDetail[]
+  WalletCreationRequest WalletCreationRequest[]
 }
 
 model Session {
@@ -274,23 +275,23 @@ model MasterWallet {
   balanceUsdt Float    @default(0) @map("balance_usdt")
   balanceTrx  Float    @default(0) @map("balance_trx")
   createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt       @map("updated_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
   transfers MasterWalletTransfer[]
 }
 
 model MasterWalletTransfer {
-  id             String        @id @default(cuid())
-  masterWallet   MasterWallet  @relation(fields: [masterWalletId], references: [id])
-  masterWalletId String        @map("master_wallet_id")
+  id             String       @id @default(cuid())
+  masterWallet   MasterWallet @relation(fields: [masterWalletId], references: [id])
+  masterWalletId String       @map("master_wallet_id")
   amount         Float
-  toAddress      String        @map("to_address")
+  toAddress      String       @map("to_address")
   asset          String
   status         String
-  txHash         String?       @map("tx_hash")
+  txHash         String?      @map("tx_hash")
   error          String?
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt       @map("updated_at")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
 }
 
 model SystemConfig {
@@ -300,12 +301,28 @@ model SystemConfig {
 
 // CryptoWallet — snake_case columns for SQLx
 model CryptoWallet {
-  id          String   @id @default(cuid())
-  address     String   @unique
-  user        User     @relation(fields: [userId], references: [id])
-  userId      String   @unique @map("user_id")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt       @map("updated_at")
-  isActive    Boolean  @default(true)   @map("is_active")
+  id           String              @id @default(cuid())
+  address      String              @unique
+  user         User                @relation(fields: [userId], references: [id])
+  userId       String              @unique @map("user_id")
+  createdAt    DateTime            @default(now()) @map("created_at")
+  updatedAt    DateTime            @updatedAt @map("updated_at")
+  isActive     Boolean             @default(true) @map("is_active")
   transactions WalletTransaction[]
+}
+
+model WalletCreationRequest {
+  id           String   @id @default(cuid())
+  user         User     @relation(fields: [userId], references: [id])
+  userId       String
+  status       RequestStatus @default(PENDING)
+  address      String?
+  createdAt    DateTime @default(now())
+  processedAt  DateTime?
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
