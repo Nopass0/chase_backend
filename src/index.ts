@@ -67,7 +67,11 @@ const app = new Elysia({ prefix: "/api" })
     services;
   })
   .use(ip())
-  .use(cors())
+  .use(cors({
+    origin: "*",
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"]
+  }))
   .use(
     swagger({
       path: "/docs",
