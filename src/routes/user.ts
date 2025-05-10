@@ -27,6 +27,21 @@ const UserPublic = t.Object({
 });
 
 /* --------------------------------------------------------------------------
+ * Схема ответа при авторизации
+ * ------------------------------------------------------------------------*/
+const AuthResponseSchema = t.Object({
+  token: t.String({
+    description: "Токен для заголовка x-trader-token (действует 30 дней)",
+  }),
+  id: t.String(),
+  email: t.String(),
+  name: t.String(),
+  balanceUsdt: t.Number(),
+  balanceRub: t.Number(),
+  createdAt: t.String(),
+});
+
+/* --------------------------------------------------------------------------
  *  Guard для всех защищённых эндпоинтов
  * ------------------------------------------------------------------------*/
 const authGuard = {
@@ -113,15 +128,7 @@ export default (app: Elysia) =>
           password: t.String({ description: "Пароль пользователя" }),
         }),
         response: {
-          200: t.Intersect([
-            t.Object({
-              token: t.String({
-                description:
-                  "Токен для заголовка x-trader-token (действует 30 дней)",
-              }),
-            }),
-            UserPublic,
-          ]),
+          200: AuthResponseSchema,
           401: ErrorSchema,
           403: ErrorSchema,
         },

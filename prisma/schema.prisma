@@ -266,6 +266,7 @@ model BankDetail {
   createdAt            DateTime      @default(now())
   updatedAt            DateTime      @updatedAt
   Transaction          Transaction[]
+  Device               Device[]
 }
 
 model MasterWallet {
@@ -312,17 +313,47 @@ model CryptoWallet {
 }
 
 model WalletCreationRequest {
-  id           String   @id @default(cuid())
-  user         User     @relation(fields: [userId], references: [id])
-  userId       String
-  status       RequestStatus @default(PENDING)
-  address      String?
-  createdAt    DateTime @default(now())
-  processedAt  DateTime?
+  id          String        @id @default(cuid())
+  user        User          @relation(fields: [userId], references: [id])
+  userId      String
+  status      RequestStatus @default(PENDING)
+  address     String?
+  createdAt   DateTime      @default(now())
+  processedAt DateTime?
 }
 
 enum RequestStatus {
   PENDING
   APPROVED
   REJECTED
+}
+
+model Device {
+  id            String         @id @default(cuid())
+  name          String
+  energy        Float?
+  ethernetSpeed Float?
+  isOnline      Boolean?
+  bankDetail    BankDetail     @relation(fields: [bankDetailId], references: [id])
+  token         String?
+  bankDetailId  String
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+  notifications Notification[]
+}
+
+enum NotificationType {
+  AppNotification
+  SMS
+}
+
+model Notification {
+  id          String           @id @default(cuid())
+  type        NotificationType
+  application String?
+  message     String
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+  Device      Device?          @relation(fields: [deviceId], references: [id])
+  deviceId    String?
 }

@@ -1,11 +1,22 @@
-// src/server/routes/trader/bank-details.ts  (полный рабочий файл)
+// src/server/routes/trader/bank-details.ts
 import { Elysia, t } from "elysia";
 import { db } from "@/db";
-import { BankType, Status } from "@prisma/client";
+import { BankType } from "@prisma/client";
 import ErrorSchema from "@/types/error";
 import { startOfDay, endOfDay } from "date-fns";
 
-/* ---------- DTO (то же, без userId) ---------- */
+/* ---------- DTOs ---------- */
+const DeviceDTO = t.Object({
+  id: t.String(),
+  name: t.String(),
+  energy: t.Union([t.Number(), t.Null()]),
+  ethernetSpeed: t.Union([t.Number(), t.Null()]),
+  isOnline: t.Optional(t.Boolean()),
+  token: t.String(),
+  createdAt: t.String(),
+  updatedAt: t.String(),
+});
+
 const BankDetailDTO = t.Object({
   id: t.String(),
   methodType: t.String(),
@@ -21,23 +32,59 @@ const BankDetailDTO = t.Object({
   turnoverDay: t.Number(),
   turnoverTotal: t.Number(),
   isArchived: t.Boolean(),
+  hasDevice: t.Boolean(), // Flag indicating if this bank detail has a device
+  device: DeviceDTO, // Connected device (empty object if no device)
   createdAt: t.String(),
   updatedAt: t.String(),
 });
 
-/* ---------- helper ---------- */
+/* ---------- helpers ---------- */
+const formatDevice = (device) => {
+  if (!device) {
+    // Return empty device object instead of null to satisfy schema requirements
+    return {
+      id: "",
+      name: "",
+      energy: 0,
+      ethernetSpeed: 0,
+      isOnline: false,
+      token: "",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+  }
+  
+  return {
+    id: device.id,
+    name: device.name,
+    energy: device.energy, // Can be null
+    ethernetSpeed: device.ethernetSpeed, // Can be null
+    isOnline: device.isOnline,
+    token: device.token || '',
+    createdAt: device.createdAt.toISOString(),
+    updatedAt: device.updatedAt.toISOString(),
+  };
+};
+
 const toDTO = (
-  r: any,
+  bankDetail,
   turnoverDay = 0,
   turnoverTotal = 0,
-): t.Static<typeof BankDetailDTO> => {
-  const { userId, ...rest } = r; // ⚠️ убираем userId
+  device = null,
+) => {
+  const { userId, Device, ...rest } = bankDetail;
+  
+  // Try to get device from the Device property if it exists and no device was provided
+  const deviceToUse = device || (Device && Device.length > 0 ? Device[0] : null);
+  
   return {
     ...rest,
     turnoverDay,
     turnoverTotal,
-    createdAt: r.createdAt.toISOString(),
-    updatedAt: r.updatedAt.toISOString(),
+    hasDevice: !!deviceToUse,
+    device: formatDevice(deviceToUse),
+    createdAt: bankDetail.createdAt.toISOString(),
+    updatedAt: bankDetail.updatedAt.toISOString(),
   };
 };
 
@@ -51,14 +98,23 @@ export default (app: Elysia) =>
         const todayStart = startOfDay(new Date());
         const todayEnd = endOfDay(new Date());
 
+        // Get bank details with their devices
         const bankDetails = await db.bankDetail.findMany({
-          where: { userId: trader.id, isArchived: query.archived === "true" },
+          where: { 
+            userId: trader.id, 
+            isArchived: query.archived === "true" 
+          },
+          include: {
+            Device: {
+              take: 1 // Get only the first device if there are many
+            }
+          },
           orderBy: { createdAt: "desc" },
         });
 
         const result = await Promise.all(
           bankDetails.map(async (bd) => {
-            /* —— сумма за сегодня —— */
+            /* —— daily turnover —— */
             const {
               _sum: { amount: daySum },
             } = await db.transaction.aggregate({
@@ -70,7 +126,7 @@ export default (app: Elysia) =>
               _sum: { amount: true },
             });
 
-            /* —— сумма за всё время —— */
+            /* —— total turnover —— */
             const {
               _sum: { amount: totalSum },
             } = await db.transaction.aggregate({
@@ -81,13 +137,7 @@ export default (app: Elysia) =>
               _sum: { amount: true },
             });
 
-            return {
-              ...bd,
-              turnoverDay: daySum ?? 0,
-              turnoverTotal: totalSum ?? 0,
-              createdAt: bd.createdAt.toISOString(),
-              updatedAt: bd.updatedAt.toISOString(),
-            };
+            return toDTO(bd, daySum ?? 0, totalSum ?? 0);
           }),
         );
 
@@ -109,7 +159,7 @@ export default (app: Elysia) =>
     .post(
       "",
       async ({ trader, body }) => {
-        const rec = await db.bankDetail.create({
+        const bankDetail = await db.bankDetail.create({
           data: {
             ...body,
             dailyLimit: body.dailyLimit ?? 0,
@@ -118,7 +168,9 @@ export default (app: Elysia) =>
             bankType: body.bankType as BankType,
           },
         });
-        return toDTO(rec); // userId отброшен
+        
+        // Bank detail was just created, so there are no devices yet
+        return toDTO(bankDetail, 0, 0);
       },
       {
         tags: ["trader"],
@@ -146,9 +198,10 @@ export default (app: Elysia) =>
         const exists = await db.bankDetail.findFirst({
           where: { id: params.id, userId: trader.id },
         });
+        
         if (!exists) return error(404, { error: "Реквизит не найден" });
 
-        const rec = await db.bankDetail.update({
+        const bankDetail = await db.bankDetail.update({
           where: { id: params.id },
           data: {
             ...body,
@@ -156,14 +209,33 @@ export default (app: Elysia) =>
             monthlyLimit: body.monthlyLimit ?? 0,
             bankType: (body.bankType ?? exists.bankType) as BankType,
           },
+          include: {
+            Device: {
+              take: 1
+            }
+          }
         });
-        return toDTO(rec);
+        
+        return toDTO(bankDetail, 0, 0);
       },
       {
         tags: ["trader"],
         detail: { summary: "Обновить реквизит" },
         params: t.Object({ id: t.String() }),
-        body: t.Partial(BankDetailDTO),
+        body: t.Partial(
+          t.Object({
+            methodType: t.String(),
+            bankType: t.String(),
+            cardNumber: t.String(),
+            recipientName: t.String(),
+            phoneNumber: t.Optional(t.String()),
+            minAmount: t.Number(),
+            maxAmount: t.Number(),
+            dailyLimit: t.Number(),
+            monthlyLimit: t.Number(),
+            intervalMinutes: t.Number(),
+          })
+        ),
         response: {
           200: BankDetailDTO,
           401: ErrorSchema,

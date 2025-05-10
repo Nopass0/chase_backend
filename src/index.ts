@@ -12,6 +12,7 @@ import infoRoutes from "@/routes/info";
 import adminRoutes from "@/routes/admin";
 import merchantRoutes from "@/routes/merchant";
 import traderRoutes from "@/routes/trader";
+import deviceRoutes from "@/routes/trader/device";
 
 import { Glob } from "bun";
 import { pathToFileURL } from "node:url";
@@ -97,6 +98,10 @@ const app = new Elysia({ prefix: "/api" })
             name: "trader",
             description: "Эндпоинты для трейдеров (защищенные токеном сессии)",
           },
+          {
+            name: "device",
+            description: "Эндпоинты для устройств (защищенные токеном устройства)",
+          },
         ],
       },
     }),
@@ -118,6 +123,7 @@ const app = new Elysia({ prefix: "/api" })
     (g) => g.use(adminGuard(MASTER_KEY, ADMIN_IP_WHITELIST)).use(adminRoutes), // ← сами эндпоинты
   )
   .group("/merchant", (app) => app.use(merchantGuard()).use(merchantRoutes))
+  .group("/device", (app) => app.use(deviceRoutes))
   .group("/trader", (app) => app.use(traderRoutes))
   .listen(Bun.env.PORT ?? 3000);
 

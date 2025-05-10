@@ -33,6 +33,10 @@ export const traderGuard = () => (app: Elysia) =>
       }),
       async beforeHandle({ headers, error }) {
         const token = headers["x-trader-token"];
+        
+        if (!token) {
+          return error(401, { error: "Токен не предоставлен" });
+        }
 
         const session = await db.session.findUnique({
           where: { token },
@@ -56,11 +60,20 @@ export const traderGuard = () => (app: Elysia) =>
     /* 2. Добавляем трейдера в контекст */
     .derive(async ({ headers }) => {
       const token = headers["x-trader-token"];
+      // Ensure token is not undefined before querying
+      if (!token) {
+        throw new Error("Token is required for trader authentication");
+      }
+      
       const session = await db.session.findUnique({
         where: { token },
         include: { user: true },
       });
 
       /* session точно есть, т.к. beforeHandle пропустил нас дальше */
-      return { trader: session!.user };
+      if (!session || !session.user) {
+        throw new Error("Session or user not found");
+      }
+      
+      return { trader: session.user };
     });
